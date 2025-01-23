@@ -2,10 +2,10 @@ default: &default
   adapter: mysql2
   encoding: utf8mb4
   pool: 5
-  username: root 
+  username: root
   password: your_password
-  host: mysql-server              
-  port: 3306              
+  host: mysql-server         
+  port: 3306
 
 development:
   <<: *default

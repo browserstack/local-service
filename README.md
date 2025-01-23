@@ -149,3 +149,10 @@ podman rm mysql-server
   ```bash
   podman logs my-new-app
   ```
+
+
+### If using docker-compse
+  ```
+  docker-compose build
+  docker-compose up
+  ```
