@@ -16,6 +16,9 @@ RUN apt-get update -qq && apt-get install -y \
 
 # Copy gem configs
 COPY Gemfile Gemfile.lock ./
+
+USER app
+
 RUN bundle install
 
 # Copy the rest of the app
