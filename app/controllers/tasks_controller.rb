@@ -27,7 +27,7 @@ class TasksController < ApplicationController
   def create
     @task = T.let(Task.new(task_params), T.nilable(Task))
     if T.must(@task).save
-      redirect_to task_path(T.must(@task)), notice: "Task was successfully created."
+      redirect_to task_path, notice: "Task was successfully created."
     else
       render :new
     end
