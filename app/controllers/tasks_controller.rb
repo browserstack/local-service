@@ -56,7 +56,7 @@ class TasksController < ApplicationController
 
   sig { void }
   def set_task
-    @task = T.let(Task.find(params[:id]), T.nilable(Task))
+    @task = T.let(current_user.tasks.find(params[:id]), T.nilable(Task))
   end
 
   sig { returns(ActionController::Parameters) }
