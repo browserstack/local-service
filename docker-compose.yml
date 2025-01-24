@@ -1,5 +1,5 @@
 services:
-  mysql-server:
+  local_service_db:
     image: mysql:latest
     restart: always
     environment:
@@ -8,19 +8,20 @@ services:
       MYSQL_PASSWORD: your_password
     ports:
       - "3307:3306"
-  my-new-app:
+  local_service:
     build: .
     command: bundle exec rails s -p 3000 -b '0.0.0.0'
     volumes:
-      - ".:/my-new-app"
+      - ".:/app"
     ports:
       - "3000:3000"
     depends_on:
-      - mysql-server
+      - local_service_db
     links:
-      - mysql-server
+      - local_service_db
     environment:
       DB_USER: root
       DB_NAME: your_app_development
       DB_PASSWORD: your_password
-      DB_HOST: mysql-server
+      DB_HOST: local_service_db
+      DB_PORT: "3306"
