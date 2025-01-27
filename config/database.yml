@@ -4,8 +4,8 @@ default: &default
   pool: 5
   username: root
   password: your_password
-  host: mysql-server         
-  port: 3306
+  host: <%= ENV.fetch("DB_HOST") { "localhost" } %>         
+  port:  <%= ENV.fetch("DB_PORT") { 3306 } %> 
 
 development:
   <<: *default
