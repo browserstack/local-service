@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2025_01_24_103541) do
+ActiveRecord::Schema[7.1].define(version: 2025_01_27_092045) do
   create_table "custom_repeater_allocations", charset: "utf8mb3", force: :cascade do |t|
     t.bigint "repeater_id", null: false
     t.bigint "user_or_group_id", null: false
@@ -32,6 +32,15 @@ ActiveRecord::Schema[7.1].define(version: 2025_01_24_103541) do
     t.index ["repeater_id"], name: "index_dedicated_repeater_allocations_on_repeater_id"
     t.index ["repeater_ip_id"], name: "index_dedicated_repeater_allocations_on_repeater_ip_id"
     t.index ["user_or_group_id", "repeater_id"], name: "index_dedicated_repeater_allocations", unique: true
+  end
+
+  create_table "local_hub_repeater_regions", charset: "utf8mb3", force: :cascade do |t|
+    t.bigint "user_or_group_id", null: false
+    t.string "association_type", null: false
+    t.string "hub_repeater_sessions"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_or_group_id", "association_type"], name: "index_local_hub_repeater_regions_on_user_or_group_and_type", unique: true
   end
 
   create_table "local_tunnel_info", charset: "utf8mb3", force: :cascade do |t|
