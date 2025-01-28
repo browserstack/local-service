@@ -5,6 +5,7 @@ class CreateTunnelRepeaters < ActiveRecord::Migration[7.0]
       t.bigint :tunnel_id, null: false
       t.bigint :user_or_group_id, null: false
       t.string :association_type, null: false
+      t.boolean :backup, null: false, default: false
 
       t.timestamps
     end

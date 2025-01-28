@@ -111,6 +111,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_01_27_092045) do
     t.bigint "tunnel_id", null: false
     t.bigint "user_or_group_id", null: false
     t.string "association_type", null: false
+    t.boolean "backup", default: false, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["repeater_id"], name: "index_tunnel_repeaters_on_repeater_id"

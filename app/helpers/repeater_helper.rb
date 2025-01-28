@@ -1,7 +1,8 @@
 module RepeaterHelper
 
-  def get_repeater_list(region, custom_repeater_params, geopolitical_region, local_tunnel_info, user_id, group_id, sub_group_id, product, type)
+  def self.get_repeater_list(region, custom_repeater_params=nil, local_tunnel_info, user_id, group_id, sub_group_id, product)
     custom_repeaters_allotted = RedisUtils.allot_custom_repeaters?(user_id, group_id, sub_group_id)
+    local_identifier = local_tunnel_info.local_identifier
     local_geolocation_enabled = !local_identifier.blank? && local_identifier.start_with?("local-ip-geolocation-")
     product = IS_APP_AUTOMATE ? APP_AUTOMATE : AUTOMATE
 
@@ -30,7 +31,6 @@ module RepeaterHelper
     
     if local_tunnel_info.ats_local? || local_tunnel_info.integrations_service_local?
       tunnel_repeaters, backup_map = RepeaterHelper.get_ats_repeaters(region)
-      custom_repeaters_allotted = true
       Rails.logger.info("[LOCAL][Turboscale] Connecting binary to repeaters: #{tunnel_repeaters}")
       return tunnel_repeaters, backup_map
     end
@@ -41,9 +41,10 @@ module RepeaterHelper
       return tunnel_repeaters, backup_map
     end
 
-    if custom_repeater_params
-      # check if the all the custom repeaters are present in the DB  
-    end
+    # if custom_repeater_params
+    #   # This is the case where we are managing AUTHORIZED_ADMIN_GROUPS
+    #   # check if the all the custom repeaters are present in the DB 
+    # end
 
     # Create a table same as LocalHubRepeaterRegions from railsApp
     # ToDo -> create a jira task to migrate LocalHubRepeaterRegions from railsApp to Local-service
@@ -68,6 +69,7 @@ module RepeaterHelper
       backup_map = tunnel_repeaters.map{ |rep| CHROME_REPEATERS[BACKUP_REPEATERS[region]].include?(rep) }
     end
 
+    return tunnel_repeaters, backup_map
     # ToDo -> Handle russia-backup case 
     # ToDO -> Else sceneroi handle hub region if no region is passed for L -127(railsApp)
   end  
@@ -101,7 +103,7 @@ module RepeaterHelper
     # join with repeater_region table on the basis region_id
     # filter status that is = down , blacklist(fully)
     # select status, hostname, repeater_id
-    repeater_details = Repeater.joins(:repeater_region).where(repeater_regions: { dc_name: repeater_region }).where.not(state: ["Down", "blacklisted"]).select(:id, :host_name, :state)
+    repeater_details = Repeater.joins(:repeater_region).where(repeater_regions: { dc_name: repeater_region }).where.not(state: ["down", "blacklisted"]).select(:id, :host_name, :state)
 
     # remove partial blacklist repeater if there is atlaest one repeater with status = up
     repeaters = self.filter_damaged_repeaters(repeater_details)
@@ -128,6 +130,7 @@ module RepeaterHelper
     #  write a query to fetch the repeater id . On the basis of user_or_group_id and its association type
     #  get the whole partiall balcklisted wala filer_damaged_repeater logic from table as done above 
 
+    # ToDo-: Add composite index for user_or_group_id + association type. If repeater_id index does't help anywhere in join. 
     custom_repeater_details = CustomRepeaterAllocation
       .joins(:repeater)
       .where(
@@ -140,7 +143,7 @@ module RepeaterHelper
         SQL
         user_id: user_id, group_id: group_id, sub_group_id: sub_group_id
       )
-      .where.not(repeaters: { state: ["Down", "Blacklisted"] })
+      .where.not(repeaters: { state: ["down", "blacklisted"] })
       .select(
         "repeaters.id AS repeater_id",
         "repeaters.state",
