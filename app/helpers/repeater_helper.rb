@@ -42,8 +42,14 @@ module RepeaterHelper
     end
 
     # if custom_repeater_params
-    #   # This is the case where we are managing AUTHORIZED_ADMIN_GROUPS
+    #   #This is the case where we are managing AUTHORIZED_ADMIN_GROUPS
     #   # check if the all the custom repeaters are present in the DB 
+    #   # need to upadate UT 
+    #   custom_repeaters = custom_repeater_param.split(",").uniq
+    #   tunnel_repeaters =   Repeater.joins(:custom_repeater_allocations).where(custom_repeater_allocations: { user_or_group_id: scope_id, association_type: scope}).distinct
+    #   tunnel_repeaters = Tunnel.get_repeater_region(region) if tunnel_repeaters.empty?
+    #   backup_map = tunnel_repeaters.map{ |rep| false }
+    #   return tunnel_repeaters, backup_map
     # end
 
     # Create a table same as LocalHubRepeaterRegions from railsApp
@@ -83,7 +89,7 @@ module RepeaterHelper
       # repeater table where check for type  = "ATS" . Also add get_filter wala logic in this query
       ats_repeaters = Repeater.where(repeater_type: 'ATS').select(:id, :state)
       repeaters = self.filter_damaged_repeaters(ats_repeaters)
-      backup_map = tunnel_repeaters.map{ |rep| true }
+      backup_map = tunnel_repeaters.map{ |rep| false }
       return repeaters, backup_map
     else
       return self.get_repeater_region(region)
@@ -103,7 +109,7 @@ module RepeaterHelper
     # join with repeater_region table on the basis region_id
     # filter status that is = down , blacklist(fully)
     # select status, hostname, repeater_id
-    repeater_details = Repeater.joins(:repeater_region).where(repeater_regions: { dc_name: repeater_region }).where.not(state: ["down", "blacklisted"]).select(:id, :host_name, :state)
+    repeater_details = Repeater.joins(:repeater_regions).where(repeater_regions: { dc_name: repeater_region }).where.not(state: ["down", "blacklisted"]).select(:id, :host_name, :state)
 
     # remove partial blacklist repeater if there is atlaest one repeater with status = up
     repeaters = self.filter_damaged_repeaters(repeater_details)
@@ -132,7 +138,7 @@ module RepeaterHelper
 
     # ToDo-: Add composite index for user_or_group_id + association type. If repeater_id index does't help anywhere in join. 
     custom_repeater_details = CustomRepeaterAllocation
-      .joins(:repeater)
+      .joins(:repeaters)
       .where(
         <<-SQL.squish,
           (
