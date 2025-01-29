@@ -15,8 +15,7 @@ RUN . ~/.bashrc \
 
 
 RUN apt-get update -qq && apt-get install -y \
-    build-essential=12.9 \
-    git \
+    build-essential=12.9 --no-install-recommends
   && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
