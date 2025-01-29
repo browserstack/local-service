@@ -23,8 +23,6 @@ WORKDIR /app
 # Copy gem configs
 COPY Gemfile Gemfile.lock ./
 
-USER app
-
 RUN bundle install
 
 # Copy the rest of the app
