@@ -9,21 +9,14 @@ RUN  ln -s /bin/mkdir /usr/bin/mkdir \
 && echo 'source /usr/local/rvm/scripts/rvm' >> ~/.bashrc
 
 RUN . ~/.bashrc \
-    && rvm install 3.1.2 \
-    && rvm use 3.1.2 --default \
+    && rvm install 3.2.3 \
+    && rvm use 3.2.32 --default \
     && gem install bundler -v 2.3.7
 
 
 RUN apt-get update -qq && apt-get install -y \
-    build-essential \
+    build-essential=12.9 \
     git \
-    libmariadb-dev \
-    pkg-config \
-    libssl-dev \
-    zlib1g-dev \
-    nodejs \
-    yarn \
-    libvips \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
