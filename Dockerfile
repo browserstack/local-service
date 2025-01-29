@@ -23,7 +23,13 @@ WORKDIR /app
 # Copy gem configs
 COPY Gemfile Gemfile.lock ./
 
-RUN bundle install
+RUN mkdir -p /root/.ssh/ && \
+    echo "$ssh_prv_key" > /root/.ssh/id_rsa && \
+    chmod 600 /root/.ssh/id_rsa && \
+    ssh-keyscan -t rsa github.com > /root/.ssh/known_hosts && \
+    . ~/.bashrc && \
+    bundle install && \
+    rm /root/.ssh/id_rsa
 
 # Copy the rest of the app
 COPY . /app
