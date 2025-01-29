@@ -9,7 +9,7 @@ RUN  ln -s /bin/mkdir /usr/bin/mkdir \
 && echo 'source /usr/local/rvm/scripts/rvm' >> ~/.bashrc
 
 RUN . ~/.bashrc \
-    && rvm install 3.2.3 \
+    && rvm install 3.2.32 \
     && rvm use 3.2.32 --default \
     && gem install bundler -v 2.3.7
 
