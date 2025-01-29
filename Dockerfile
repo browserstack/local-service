@@ -10,12 +10,12 @@ RUN  ln -s /bin/mkdir /usr/bin/mkdir \
 
 RUN . ~/.bashrc \
     && rvm install 3.2.3 \
-    && rvm use 3.2.32 --default \
+    && rvm use 3.2.3 --default \
     && gem install bundler -v 2.3.7
 
 
 RUN apt-get update -qq && apt-get install -y \
-    build-essential=12.9 --no-install-recommends
+  build-essential=12.9 --no-install-recommends \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -23,9 +23,13 @@ WORKDIR /app
 # Copy gem configs
 COPY Gemfile Gemfile.lock ./
 
-USER app
-
-RUN bundle install
+RUN mkdir -p /root/.ssh/ && \
+    echo "$ssh_prv_key" > /root/.ssh/id_rsa && \
+    chmod 600 /root/.ssh/id_rsa && \
+    ssh-keyscan -t rsa github.com > /root/.ssh/known_hosts && \
+    . ~/.bashrc && \
+    bundle install && \
+    rm /root/.ssh/id_rsa
 
 # Copy the rest of the app
 COPY . /app
