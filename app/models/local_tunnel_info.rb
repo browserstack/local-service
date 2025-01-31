@@ -1,8 +1,9 @@
 class LocalTunnelInfo < ApplicationRecord
   MAX_SAVE_RETRIES = 5
 
-  has_many :tunnel_repeaters
-  has_many :repeaters, through: :tunnel_repeaters
+  has_many :tunnel_repeater, dependent: :destroy 
+  has_many :repeater, through: :tunnel_repeater, dependent: :destroy 
+  has_one :local_tunnel_info_log
 
   validates :auth_token, presence: true, uniqueness: true
   validates :local_identifier, presence: true
@@ -53,15 +54,25 @@ class LocalTunnelInfo < ApplicationRecord
   end
 
   def initialize_tunnel_repeaters(repeaters_list, backups_list, user_id)
+    return if repeaters_list.blank? || backups_list.blank?
+  
     tunnel_repeaters_dump = []
-    repeaters_list.zip(backups_list).each do |repeater_id, backup|
-      current_datetime = DateTime.now.utc.to_s
-      # Added user id here was not being passed originally.
-      repeater_hash = { :repeater => repeater_id, :tunnel_id => self.id, :user_or_group_id => user_id, :association_type => 'user',
-                        :backup => backup, :created_at => current_datetime, :updated_at => current_datetime }
-      tunnel_repeaters_dump.append(repeater_hash)
+    current_datetime = DateTime.now.utc.to_s
+  
+    repeaters_list.zip(backups_list).each do |repeater, backup|
+      tunnel_repeaters_dump << {
+        repeater_id: repeater.id, 
+        local_tunnel_info_id: self.id,  
+        user_or_group_id: repeater.user_or_group_id, 
+        association_type: repeater.association_type,  
+        backup: backup,
+        disconnected: false,
+        created_at: current_datetime,
+        updated_at: current_datetime
+      }
     end
-    tunnel_repeaters = TunnelRepeater.insert_all!(tunnel_repeaters_dump)
+  
+    TunnelRepeater.insert_all!(tunnel_repeaters_dump) unless tunnel_repeaters_dump.empty?
   end
 
   def self.destroy_by_token(token)
@@ -80,4 +91,25 @@ class LocalTunnelInfo < ApplicationRecord
   def self.get_hashed_identifier(local_identifier)
     Digest::SHA1.hexdigest(local_identifier)
   end
+
+  def get_tunnel_servers
+    tunnel_repeaters.includes(:repeaters).where(disconnected: false).map { |tr| tr.repeater.host_name }
+  end
+
+  def alive_local_tunnel_repeaters
+    local_tunnel_repeaters.includes(:repeater).where(disconnected: false)
+  end
+  
+  def self.find_by_user_ids(user_ids)
+    LocalTunnelInfo.where({ :user_id => user_ids })
+  end
+
+  def ats_local?
+    !!self.local_identifier.match(/ats-repeater/)
+  end
+
+  def integrations_service_local?
+    !!self.local_identifier.match(/integrations-repeater/)
+  end
+
 end

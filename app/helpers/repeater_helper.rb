@@ -1,29 +1,34 @@
 module RepeaterHelper
 
-  def self.get_repeater_list(region, custom_repeater_params=nil, local_tunnel_info, user_id, group_id, sub_group_id, product)
+  def self.get_repeater_list(region, local_tunnel_info, user_id, group_id, sub_group_id, custom_repeater_params=nil)
     custom_repeaters_allotted = RedisUtils.allot_custom_repeaters?(user_id, group_id, sub_group_id)
     local_identifier = local_tunnel_info.local_identifier
     local_geolocation_enabled = !local_identifier.blank? && local_identifier.start_with?("local-ip-geolocation-")
-    product = IS_APP_AUTOMATE ? APP_AUTOMATE : AUTOMATE
+    
+    # ToDo -> See how the product is needed to be managed . Also see the constant correct usage
+    product = "Unknown"
 
     if custom_repeaters_allotted
       # TODO -> potentially optimise this to not fetch custom_backup_repeater in case of local_geolocation_enabled
-      repeaters, custom_backup_repeater = RepeaterHelper.get_custom_repeaters(user_id, group_id, sub_group_id, region)
-      tunnel_repeaters = []
-      backup_map = []
+      custom_repeaters, custom_backup_repeater = RepeaterHelper.get_custom_repeaters(user_id, group_id, sub_group_id, region)
+      tunnel_repeaters = custom_repeaters
+      backup_map = tunnel_repeaters.map{ |rep| false }
 
       if local_geolocation_enabled
         tunnel_repeaters_for_region, backup_map = RepeaterHelper.get_repeater_region(region)
-        tunnel_repeaters = tunnel_repeaters_for_region & repeaters
+        tunnel_repeaters = tunnel_repeaters_for_region.select do |rep|
+          custom_repeaters.any? { |custom_rep| custom_rep.host_name == rep.host_name }
+        end
         if tunnel_repeaters.empty?
           tunnel_repeaters = tunnel_repeaters_for_region
         end
         return tunnel_repeaters, backup_map
       end
       
-      local_tunnel_info.backup_repeaters_address = tunnel_repeaters.join(",")
       if RedisUtils.region_blocked?(region) && !custom_backup_repeater.empty?
-        backup_map = tunnel_repeaters.map{ |rep| backup_repeaters.include?(rep) }
+        backup_map = tunnel_repeaters.map { |rep| custom_backup_repeater.include?(rep.host_name) }
+        backup_map = backup_map.presence || tunnel_repeaters.map { false }
+        local_tunnel_info.backup_repeaters_address = tunnel_repeaters.map(&:host_name).join(",")
       end
 
       return tunnel_repeaters, backup_map
@@ -35,25 +40,40 @@ module RepeaterHelper
       return tunnel_repeaters, backup_map
     end
 
+    # ToDo -> See how to handle this call as this util is not here. API call or in parameter
     if RegionRestrictionUtils.check_georestricted_group(group_id, product)
       tunnel_repeaters, backup_map = RepeaterHelper.get_repeater_region(region, false, count=30)
       tunnel_repeaters.uniq!
       return tunnel_repeaters, backup_map
     end
 
-    # if custom_repeater_params
-    #   #This is the case where we are managing AUTHORIZED_ADMIN_GROUPS
-    #   # check if the all the custom repeaters are present in the DB 
-    #   # need to upadate UT 
-    #   custom_repeaters = custom_repeater_param.split(",").uniq
-    #   tunnel_repeaters =   Repeater.joins(:custom_repeater_allocations).where(custom_repeater_allocations: { user_or_group_id: scope_id, association_type: scope}).distinct
-    #   tunnel_repeaters = Tunnel.get_repeater_region(region) if tunnel_repeaters.empty?
-    #   backup_map = tunnel_repeaters.map{ |rep| false }
-    #   return tunnel_repeaters, backup_map
-    # end
-
-    # Create a table same as LocalHubRepeaterRegions from railsApp
-    # ToDo -> create a jira task to migrate LocalHubRepeaterRegions from railsApp to Local-service
+    if custom_repeater_params
+      custom_repeaters = custom_repeater_params.split(",").map(&:strip).uniq
+    
+      tunnel_repeaters = Repeater
+        .joins(:custom_repeater_allocations)
+        .where(<<-SQL.squish, user_id: user_id, group_id: group_id, sub_group_id: sub_group_id)
+          (
+            (custom_repeater_allocations.user_or_group_id = :user_id AND custom_repeater_allocations.association_type = 'user')
+            OR
+            (custom_repeater_allocations.user_or_group_id = :group_id AND custom_repeater_allocations.association_type = 'group')
+            OR
+            (custom_repeater_allocations.user_or_group_id = :sub_group_id AND custom_repeater_allocations.association_type = 'sub_group')
+          )
+        SQL
+        .where(host_name: custom_repeaters)
+        .select(:id, :host_name, :state)
+        .distinct
+    
+      if tunnel_repeaters.empty?
+        tunnel_repeaters, backup_map = RepeaterHelper.get_repeater_region(region)
+      else
+        backup_map = tunnel_repeaters.map { false }
+      end
+    
+      return tunnel_repeaters, backup_map
+    end
+    
 
     local_hub_repeater_regions_for_user = LocalHubRepeaterRegions.get_repeater_hub_regions_for_user(user_id)
     if local_hub_repeater_regions_for_user && !JSON.parse(local_hub_repeater_regions_for_user.hub_repeater_sessions || "{}").empty?
@@ -71,39 +91,41 @@ module RepeaterHelper
     else
       tunnel_repeaters, backup_map = RepeaterHelper.get_repeater_region(region, true, count=30)
     end
-    if RedisUtils.region_blocked?(region)
-      backup_map = tunnel_repeaters.map{ |rep| CHROME_REPEATERS[BACKUP_REPEATERS[region]].include?(rep) }
-    end
 
     return tunnel_repeaters, backup_map
-    # ToDo -> Handle russia-backup case 
-    # ToDO -> Else sceneroi handle hub region if no region is passed for L -127(railsApp)
+    # ToDo -> Handle russia-backup case, take case of user.country get it from parameter above itself
   end  
 
+  
+  #### Had created this function in our initial discussion am unable to find the relevance of it now.
+  #### Let me know we the use of it still prevails !!
   def get_repeater_list_for_dummy_tunnel(region, user_id, group_id, sub_group_id, product, type)
-
   end 
+
+
   
   def self.get_ats_repeaters(region)
     if CONFIG[:env]['name'] == "production"
       # repeater table where check for type  = "ATS" . Also add get_filter wala logic in this query
-      ats_repeaters = Repeater.where(repeater_type: 'ATS').select(:id, :state)
+      ats_repeaters = Repeater.where(repeater_type: 'ATS').select(:id, :host_name, :state)
       repeaters = self.filter_damaged_repeaters(ats_repeaters)
-      backup_map = tunnel_repeaters.map{ |rep| false }
+      backup_map = repeaters.map{ |rep| false }
       return repeaters, backup_map
     else
       return self.get_repeater_region(region)
     end
   end
 
-
   def self.get_repeater_region(region, use_backup=true, count=nil)
     repeater_region = region
     backup_map = []
+    is_backup_used = false
+        
     #  if reagion is down => we are using the  backup repeater in such case return a backup_map of all true else backup_map of all false.
     if (RedisUtils.region_blocked?(region) || RedisUtils.repeater_blocked?(region)) && use_backup
+      # ToDo-> Add in constants. Copy relevant values from browser_extensions.yml?
       repeater_region =  BACKUP_REPEATERS[region]
-      backup_map = tunnel_repeaters.map{ |rep| true }
+      is_backup_used = true
     end
 
     # join with repeater_region table on the basis region_id
@@ -111,32 +133,27 @@ module RepeaterHelper
     # select status, hostname, repeater_id
     repeater_details = Repeater.joins(:repeater_regions).where(repeater_regions: { dc_name: repeater_region }).where.not(state: ["down", "blacklisted"]).select(:id, :host_name, :state)
 
-    # remove partial blacklist repeater if there is atlaest one repeater with status = up
     repeaters = self.filter_damaged_repeaters(repeater_details)
 
     if !count.nil? && repeaters.size > count
-      # dcp_repeaters, ec2_repeaters = LocalUtility.filter_repeaters(repeaters)
-      dcp_repeaters = final_repeaters.select { |rep| rep.host_name.include?('dcp') }
-      ec2_repeaters = final_repeaters.reject { |rep| rep.host_name.include?('dcp') }
+      dcp_repeaters = repeaters.select { |rep| rep.host_name.include?('dcp') }
+      ec2_repeaters = repeaters.reject { |rep| rep.host_name.include?('dcp') }
 
       dcp_repeaters = dcp_repeaters.sample(count/2)
       ec2_repeaters = ec2_repeaters.sample(count/2)
       return dcp_repeaters + ec2_repeaters
     end
-    backup_map = tunnel_repeaters.map{ |rep| false }
+
+    backup_map = repeaters.map{ |rep| is_backup_used }
 
     return repeaters, backup_map
   end
 
-  # TODO -: write migration script to populate custom repeater allocation table from redis.
-
   def self.get_custom_repeaters(user_id, group_id, sub_group_id, region)
-    # custom_repeaters = RedisUtils.get_custom_repeaters(user_id, group_id, sub_group_id, 'desktop')
-     # call custom repeater allocation table and get the custom_repeater from it. 
+    # call custom repeater allocation table and get the custom_repeater from it. 
     #  write a query to fetch the repeater id . On the basis of user_or_group_id and its association type
     #  get the whole partiall balcklisted wala filer_damaged_repeater logic from table as done above 
 
-    # ToDo-: Add composite index for user_or_group_id + association type. If repeater_id index does't help anywhere in join. 
     custom_repeater_details = CustomRepeaterAllocation
       .joins(:repeaters)
       .where(
@@ -151,46 +168,47 @@ module RepeaterHelper
       )
       .where.not(repeaters: { state: ["down", "blacklisted"] })
       .select(
-        "repeaters.id AS repeater_id",
+        "repeaters.id",
+        "repeaters.host_name",
         "repeaters.state",
         "custom_repeater_allocations.allocation_type AS allocation_type"
       )
 
-      custom_repeaters = custom_repeater_details.select { |record| record.allocation_type == 'desktop' }.map(&:repeater_id)
-      backup_repeaters = [] 
+      desktop_rows = custom_repeater_details.select { |r| r.allocation_type == 'desktop' }
+      backup_rows  = custom_repeater_details.select { |r| r.allocation_type == 'backup' }
 
     repeaters = if RedisUtils.region_blocked?(region)
-                  #  backup repeater = above query response 
-                  # backup_repeaters = RedisUtils.get_custom_repeaters(user_id, group_id, sub_group_id, 'backup')
-                  backup_repeaters = custom_repeater_details.select { |record| record.allocation_type == 'backup' }.map(&:repeater_id)
-                  backup_repeaters.presence || custom_repeaters
+                  backup_rows.presence || desktop_rows
                 else
-                  custom_repeaters
+                  desktop_rows
                 end
-    # handled in above query same!1 
+
     repeaters = self.filter_damaged_repeaters(repeaters)
     if repeaters.nil? || repeaters.count == 0
       Rails.logger.info("[TunnelLog] User #{user_id} all the custom repeaters are blacklisted or markeddown")
+      # ToDo -> See how to handle this call as util is not here
       Util.send_to_pager('no-custom-repeaters-available', {:timestamp => Time.now.to_i, :user_id => user_id, :group_id => group_id, :sub_group_id => sub_group_id, :region => region})
     end
 
-    custom_repeaters.uniq!
-    tunnel_repeaters = custom_repeaters
-    has_custom_backup_repeaters = RedisUtils.get_custom_repeaters(user_id, group_id, sub_group_id, 'backup').present?
-    backup_repeaters = RedisUtils.get_custom_repeaters(user_id, group_id, sub_group_id, 'backup')
+    tunnel_repeaters = repeaters
 
-    return repeaters, backup_repeaters
+    has_custom_backup_repeaters = RedisUtils.get_custom_repeaters(user_id, group_id, sub_group_id, 'backup').present?
+    if has_custom_backup_repeaters
+      backup_repeaters = RedisUtils.get_custom_repeaters(user_id, group_id, sub_group_id, 'backup')
+    end
+
+    return tunnel_repeaters, backup_repeaters
   end
 
 
   def self.filter_damaged_repeaters(repeaters)
     return [] if repeaters.nil?
 
-    up_repeaters = repeaters.select { |rep| rep.state == "up" } || []
+    up_repeaters = repeaters.select { |rep| rep.state == "up" }
     partial_blacklisted_repeaters = repeaters.select { |rep| rep.state == "partially_blacklisted" } || []
 
     final_repeaters = up_repeaters.any? ? up_repeaters : partial_blacklisted_repeaters
 
-    final_repeaters
+    return final_repeaters
   end
 end

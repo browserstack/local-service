@@ -1,6 +1,6 @@
 class RepeaterSubRegion < ApplicationRecord
   belongs_to :repeater_region
-  has_many :repeaters, dependent: :destroy
+  has_many :repeater, dependent: :destroy
 
   validates :dc_name, presence: true, uniqueness: true
   validates :latitude, :longitude, presence: true

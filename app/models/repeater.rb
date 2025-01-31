@@ -1,8 +1,8 @@
 class Repeater < ApplicationRecord
   belongs_to :repeater_region
   belongs_to :repeater_sub_region
-  has_many :repeater_ips, dependent: :destroy
-  has_many :custom_repeater_allocations, dependent: :destroy
+  has_many :repeater_ip, dependent: :destroy
+  has_many :custom_repeater_allocation, dependent: :destroy
 
   validates :host_name, presence: true, uniqueness: true, format: {
     with: /\Arepeater-local-(\d+)-(dcp|ec2)-([a-zA-Z0-9]{5,})-prod\.browserstack\.com\z/,

@@ -10,7 +10,7 @@ class LocalHubRepeaterRegion < ApplicationRecord
     LocalHubRepeaterRegions.delete_all
   end
 
-  def self.get_repeater_hub_regions_for_user_or_group(user_or_group_id, association_type = 'user')
+  def self.get_repeater_hub_regions_for_user(user_or_group_id, association_type = 'user')
     find_by(user_or_group_id: user_or_group_id, association_type: association_type)
   end
 end

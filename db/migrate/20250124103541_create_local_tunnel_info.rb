@@ -12,6 +12,7 @@ class CreateLocalTunnelInfo < ActiveRecord::Migration[7.0]
       t.string :proxy_type
       t.string :tunnel_type
       t.string :hashed_identifier, limit: 40, null: false
+      t.text :backup_repeaters_address
 
       t.timestamps
     end

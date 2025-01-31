@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2025_01_27_092045) do
+ActiveRecord::Schema[7.1].define(version: 2025_01_30_074738) do
   create_table "custom_repeater_allocations", charset: "utf8mb3", force: :cascade do |t|
     t.bigint "repeater_id", null: false
     t.bigint "user_or_group_id", null: false
@@ -55,10 +55,32 @@ ActiveRecord::Schema[7.1].define(version: 2025_01_27_092045) do
     t.string "proxy_type"
     t.string "tunnel_type"
     t.string "hashed_identifier", limit: 40, null: false
+    t.text "backup_repeaters_address"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["auth_token"], name: "index_local_tunnel_info_on_auth_token", unique: true
     t.index ["hashed_identifier"], name: "index_local_tunnel_info_on_hashed_identifier", unique: true
+  end
+
+  create_table "local_tunnel_info_logs", id: :integer, charset: "utf8mb3", collation: "utf8mb3_unicode_ci", force: :cascade do |t|
+    t.string "hashed_id", null: false
+    t.bigint "user_or_group_id", null: false
+    t.string "association_type", null: false
+    t.string "auth_token", null: false
+    t.text "system_details"
+    t.text "local_identifier"
+    t.integer "local_tunnel_info_id", null: false
+    t.text "data"
+    t.text "params"
+    t.integer "json_version", null: false
+    t.boolean "display", default: false
+    t.text "misc_data"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["auth_token"], name: "index_local_tunnel_info_logs_on_auth_token"
+    t.index ["hashed_id"], name: "index_local_tunnel_info_logs_on_hashed_id", unique: true
+    t.index ["local_tunnel_info_id"], name: "index_local_tunnel_info_logs_on_local_tunnel_info_id", unique: true
+    t.index ["user_or_group_id", "association_type"], name: "index_local_tunnel_info_logs_on_user_or_group_and_type"
   end
 
   create_table "repeater_ips", charset: "utf8mb3", force: :cascade do |t|
@@ -108,14 +130,15 @@ ActiveRecord::Schema[7.1].define(version: 2025_01_27_092045) do
 
   create_table "tunnel_repeaters", charset: "utf8mb3", force: :cascade do |t|
     t.bigint "repeater_id", null: false
-    t.bigint "tunnel_id", null: false
+    t.bigint "local_tunnel_info_id", null: false
     t.bigint "user_or_group_id", null: false
     t.string "association_type", null: false
     t.boolean "backup", default: false, null: false
+    t.boolean "disconnected", default: false, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.index ["local_tunnel_info_id", "repeater_id"], name: "index_tunnel_repeaters_on_tunnel_and_repeater", unique: true
     t.index ["repeater_id"], name: "index_tunnel_repeaters_on_repeater_id"
-    t.index ["tunnel_id", "repeater_id"], name: "index_tunnel_repeaters_on_tunnel_and_repeater", unique: true
   end
 
   add_foreign_key "custom_repeater_allocations", "repeaters"

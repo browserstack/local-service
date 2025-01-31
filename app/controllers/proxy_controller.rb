@@ -1,4 +1,4 @@
-module ProxyPortHelper
+class ProxyController < ApplicationController
 
   def port
     if !['chrome', 'firefox', 'node'].include?(params[:tunnel])
@@ -28,7 +28,7 @@ module ProxyPortHelper
     end
     new_local_tunnel_info_obj, tunnel_repeaters, backup_map, global_settings_applied = initialize_local_tunnel_info(region, @token)
 
-    if tunnel_repeaters.empty? # TODO: && !params[:dummy_tunnel] && RedisUtils.new_force_repeater_logic_enabled?(region)
+    if tunnel_repeaters.empty? 
       render :json => { :browserstack_message => "Error: Could not setup Local Testing.", :no_repeaters_alloted => true }.to_json, :status => 503
       return
     end
@@ -44,7 +44,7 @@ module ProxyPortHelper
         if params[:tunnel] == 'node'
           LocalTunnelInfo.destroy_by_token("#{@token}-oldBinary")
         end
-        # made modyfication here
+
         local_tunnel_info_obj = LocalTunnelInfo.find_by_token(@token)
         if params[:dummy_tunnel]
           begin
@@ -54,7 +54,7 @@ module ProxyPortHelper
             end
             is_saved = new_local_tunnel_info_obj.safely_save
           rescue ActiveRecord::RecordNotUnique=>e
-            Rails.logger.info "Got RecordNotUnique excpetion saving dummy LTI - #{@token} - #{new_local_tunnel_info_obj[:hashed_identifier]}, returning 200 so existing tunnel can be picked up"
+            Rails.logger.info "Got RecordNotUnique exception saving dummy LTI - #{@token} - #{new_local_tunnel_info_obj[:hashed_identifier]}, returning 200 so existing tunnel can be picked up"
             render :json => { status: "Dummy tunnel already exists" }.to_json, :status => 200
             return
           end
@@ -88,6 +88,7 @@ module ProxyPortHelper
           system_details.merge!(JSON.parse(params[:systemParams]))
 
           lti_log = LocalTunnelInfoLog.create_with_params(new_local_tunnel_info_obj, params[:cmdLineParams], system_details, misc_data, enabled_by_user)
+          
         end
       end
     rescue ActiveRecord::RecordNotUnique=>e
@@ -95,8 +96,7 @@ module ProxyPortHelper
       render :json => { :browserstack_message => "Error: Could not setup Local Testing." }.to_json, :status => 403
       return
     end
-    # We are still storing tunnel repeaters entries in DB for dummy tunnels, even though they are not being used.
-    new_local_tunnel_info_obj.initialize_tunnel_repeaters(tunnel_repeaters, backup_map, current_user.id) # TODO: if !params[:dummy_tunnel] && RedisUtils.new_force_repeater_logic_enabled?(region)
+    new_local_tunnel_info_obj.initialize_tunnel_repeaters(tunnel_repeaters, backup_map, current_user.id)
     local_tunnel_servers = new_local_tunnel_info_obj.get_tunnel_servers
     o_hash = {
       :name              => (new_local_tunnel_info_obj.username || "").downcase,
@@ -144,8 +144,8 @@ module ProxyPortHelper
 
     tunnel_terminal_token = new_local_tunnel_info_obj.tunnel_terminal_token
     # ToDo ->  Create an API in railsApp
-    automate_session_ids = Tunnel.get_running_sessions('automate_logs', tunnel_terminal_token)
-    app_automate_session_ids = Tunnel.get_running_sessions( 'app_automate_logs', tunnel_terminal_token)
+    # automate_session_ids = Tunnel.get_running_sessions('automate_logs', tunnel_terminal_token)
+    # app_automate_session_ids = Tunnel.get_running_sessions( 'app_automate_logs', tunnel_terminal_token)
 
     if !(automate_session_ids.empty? && app_automate_session_ids.empty?)
       session_ids = Hash.new([])
@@ -153,13 +153,18 @@ module ProxyPortHelper
       session_ids["app_automate_session_ids"] = app_automate_session_ids
       # using strings in hash instead of sym for sidekiq compatibility
       info = {"request_type" => "/proxy/port", "called_from" => "CONNECTION_INIT"}
-      LocalInitConnectionWorker.perform_async(session_ids, @token, @current_user.id, @current_user.group_id, info)
+
+      # ToDo -> Analyze this dependency here is it requires or to be removed 
+      # LocalInitConnectionWorker.perform_async(session_ids, @token, @current_user.id, @current_user.group_id, info)
+      
     end
 
     Tunnel.release_block_from_session_lock(@token)
 
     info_json = params[:cmdLineArgs] || params[:infoJson]
-    Tunnel.send_local_tunnel_info_eds(new_local_tunnel_info_obj, @current_user, info_json,  params[:semanticVersion])
+
+    # ToDo -> Sending data to EDS, Needed to be changes its not present here 
+    # Tunnel.send_local_tunnel_info_eds(new_local_tunnel_info_obj, @current_user, info_json,  params[:semanticVersion])
 
     render :json => o_hash.to_json
   
@@ -169,9 +174,7 @@ module ProxyPortHelper
   def initialize_local_tunnel_info(region, token)
     local_tunnel_info = LocalTunnelInfo.create_by_token(token)
     local_tunnel_info.region = region
-    # We currently still store repeater attached to the lti in the DB, however this is not used anywhere.
-    # TODO: Set tunnel_repeaters, backup_map = [[], []] if params[:dummy_tunnel], once stable.
-    tunnel_repeaters, backup_map = RepeaterHelper.get_tunnel_repeaters_for_lti(region, params[:customRepeater], local_tunnel_info, current_user.id, current_user.group_id, sub_group_id)
+    tunnel_repeaters, backup_map = RepeaterHelper.get_repeater_list(region, local_tunnel_info, current_user.id, current_user.group_id, current_user.sub_group_id, params[:customRepeater])
     global_settings_applied = {}
     begin
       global_settings_applied = LocalGlobalSettings.get_all_local_global_settings(current_user)[:all_settings]
@@ -203,5 +206,34 @@ module ProxyPortHelper
 
     return [local_tunnel_info, tunnel_repeaters, backup_map, global_settings_applied]
 
+  end
+
+  def check_for_version_update
+    sameVersion, latestVersion = true, NODE_CMD_LINE_TUNNEL_VERSION
+    params[:version] = (params[:version] || "1.0").to_f
+
+    if params[:tunnel] == 'node'
+      sameVersion = (params[:version] >= (NODE_CMD_LINE_TUNNEL_VERSION - 0.2))
+      latestVersion = NODE_CMD_LINE_TUNNEL_VERSION
+    else
+      sameVersion = (params[:version] == CMD_LINE_TUNNEL_VERSION)
+      latestVersion = CMD_LINE_TUNNEL_VERSION
+    end
+
+    if @token.match(/browserstack-fork-\d+$/) || params[:skipVersionUpdate] == "true"
+      sameVersion = true
+    end
+
+    return sameVersion, latestVersion
+  end
+
+  def is_scheduled_for_deprecation?
+    binary_version = (params[:version] || "1.0").to_f
+
+    if params[:tunnel] && params[:tunnel] === 'node' && binary_version == NODE_CMD_LINE_TUNNEL_VERSION - 0.2
+      Rails.logger.info("[Local] #{@token} - Showing warning for the scheduled deprecation #{binary_version}")
+      return true
+    end
+    return false
   end
 end
