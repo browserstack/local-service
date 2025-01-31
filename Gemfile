@@ -82,3 +82,5 @@ gem "webrick"                        # HTTP server for older Ruby
 gem "mini_magick"                    # ActiveStorage::Transformers::MiniMagickTransformer
 gem "webrobots"                      # Dependency for scraping-related features
 gem "railties"                       # Core Rails framework utilities
+gem 'rspec-rails', group: [:development, :test]
+
